@@ -1,14 +1,22 @@
 version: 0.2
 
 phases:
-  pre_build:
-    commands:
-      - echo Build started
+pre_build:
+commands:
+- echo Logging in to Amazon ECR...
+- aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 848919840231.dkr.ecr.us-east-1.amazonaws.com
 
-  build:
-    commands:
-      - docker build -t recordent-ai-chatbot .
+build:
+commands:
+- echo Build started
+- docker build -t recordent-ai-chatbot .
+- docker tag recordent-ai-chatbot:latest 848919840231.dkr.ecr.us-east-1.amazonaws.com/recordent-ai-chatbot:latest
+
+post_build:
+commands:
+- echo Pushing image...
+- docker push 848919840231.dkr.ecr.us-east-1.amazonaws.com/recordent-ai-chatbot:latest
 
 artifacts:
-  files:
-    - '**/*'
+files:
+- '**/*'
