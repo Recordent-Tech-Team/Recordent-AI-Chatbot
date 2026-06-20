@@ -1,0 +1,14 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Build started
+
+  build:
+    commands:
+      - docker build -t recordent-ai-chatbot .
+
+artifacts:
+  files:
+    - '**/*'
