@@ -1,32 +1,34 @@
 import os
+
 from loguru import logger
+
+from app.core.config import settings
 
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 
 logger.remove()
+
 LOG_FORMAT = (
     "[{time:YYYY-MM-DDTHH:mm:ss.SSS}] "
     "[{level}] "
     "{extra[module]} - {message}"
 )
 
+_log_level = settings.LOG_LEVEL.upper()
 
-# APP LOGS
 logger.add(
     f"{LOG_DIR}/app.log",
-    level="DEBUG",
+    level=_log_level,
     rotation="00:00",
     retention="7 days",
     enqueue=True,
     backtrace=True,
     diagnose=True,
     format=LOG_FORMAT,
-    filter=lambda record:
-        record["extra"].get("module") != "access"
+    filter=lambda record: record["extra"].get("module") != "access",
 )
 
-# ERROR LOGS
 logger.add(
     f"{LOG_DIR}/error.log",
     level="ERROR",
@@ -36,11 +38,9 @@ logger.add(
     backtrace=True,
     diagnose=True,
     format=LOG_FORMAT,
-    filter=lambda record:
-        record["extra"].get("module") != "access"
+    filter=lambda record: record["extra"].get("module") != "access",
 )
 
-# ACCESS LOGS
 logger.add(
     f"{LOG_DIR}/access.log",
     level="INFO",
@@ -48,9 +48,12 @@ logger.add(
     retention="7 days",
     enqueue=True,
     format=LOG_FORMAT,
-    filter=lambda record:
+    filter=lambda record: (
         record["extra"].get("module") == "access"
+        and record["level"].name == "INFO"
+    ),
 )
+
 
 def get_logger(module_name: str):
     return logger.bind(module=module_name)
