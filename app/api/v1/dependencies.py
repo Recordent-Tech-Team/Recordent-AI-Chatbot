@@ -13,7 +13,11 @@ from app.db.repositories import (
     DocumentVersionRepository,
     EmbeddingArchiveRepository,
     EmbeddingRepository,
+    EvaluationResultRepository,
+    EvaluationRunRepository,
     EvaluationLogRepository,
+    GoldenDatasetCaseRepository,
+    GoldenDatasetRepository,
 )
 from app.db.session import get_db
 from app.services.admin.admin_service import AdminService
@@ -21,6 +25,9 @@ from app.services.bedrock.chat_service import BedrockChatService
 from app.services.bedrock.embedding_service import BedrockEmbeddingService
 from app.services.chat.chat_service import ChatService
 from app.services.evaluation.evaluation_service import EvaluationService
+from app.services.evaluation.framework_service import (
+    EvaluationFrameworkService,
+)
 from app.services.ingestion.ingestion_service import IngestionService
 from app.services.retrieval.retrieval_service import RetrievalService
 from app.services.s3.archive_service import S3ArchiveService
@@ -103,4 +110,26 @@ def get_admin_service(
         ChatSessionRepository(db),
         ChatMessageRepository(db),
         AuditLogRepository(db),
+    )
+
+
+def get_evaluation_framework_service(
+    db: AsyncSession = Depends(get_db),
+    chat_service: BedrockChatService = Depends(get_bedrock_chat_service),
+    embedding_service: BedrockEmbeddingService = Depends(
+        get_bedrock_embedding_service
+    ),
+) -> EvaluationFrameworkService:
+    retrieval_service = RetrievalService(
+        EmbeddingRepository(db),
+        embedding_service,
+    )
+    return EvaluationFrameworkService(
+        db=db,
+        dataset_repo=GoldenDatasetRepository(db),
+        case_repo=GoldenDatasetCaseRepository(db),
+        run_repo=EvaluationRunRepository(db),
+        result_repo=EvaluationResultRepository(db),
+        retrieval_service=retrieval_service,
+        chat_service=chat_service,
     )

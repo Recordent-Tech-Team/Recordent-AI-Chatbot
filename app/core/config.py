@@ -64,6 +64,10 @@ class Settings(BaseSettings):
         "embedding_archives",
         "audit_logs",
         "evaluation_logs",
+        "golden_datasets",
+        "golden_dataset_cases",
+        "evaluation_runs",
+        "evaluation_results",
     ]
 
     @classmethod
@@ -89,6 +93,12 @@ class Settings(BaseSettings):
 
     CHAT_MAX_HISTORY_MESSAGES: int = 10
     CHAT_EVALUATION_ENABLED: bool = False
+    EVALUATION_RUN_MAX_CONCURRENCY: int = 3
+    EVALUATION_WEIGHT_RECALL: float = 0.2
+    EVALUATION_WEIGHT_PRECISION: float = 0.2
+    EVALUATION_WEIGHT_CORRECTNESS: float = 0.25
+    EVALUATION_WEIGHT_FAITHFULNESS: float = 0.2
+    EVALUATION_WEIGHT_COMPLETENESS: float = 0.15
 
     LOG_LEVEL: str = "INFO"
 

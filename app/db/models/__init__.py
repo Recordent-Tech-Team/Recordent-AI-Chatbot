@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum,
     Float,
@@ -34,6 +35,13 @@ class DocumentVersionStatus(str, enum.Enum):
     ACTIVE = "active"
     ARCHIVED = "archived"
     PENDING = "pending"
+
+
+class EvaluationRunStatus(str, enum.Enum):
+    QUEUED = "queued"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 def enum_values(enum_cls: type[enum.Enum]) -> list[str]:
@@ -248,3 +256,109 @@ class EvaluationLog(TimestampSoftDeleteMixin, Base):
     retrieval_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     grounding_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     quality_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class GoldenDataset(TimestampSoftDeleteMixin, Base):
+    __tablename__ = TABLES["golden_datasets"]
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[uuid_lib.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        unique=True,
+        nullable=False,
+        default=uuid_lib.uuid4,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class GoldenDatasetCase(TimestampSoftDeleteMixin, Base):
+    __tablename__ = TABLES["golden_dataset_cases"]
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[uuid_lib.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        unique=True,
+        nullable=False,
+        default=uuid_lib.uuid4,
+    )
+    dataset_id: Mapped[int] = mapped_column(
+        ForeignKey(f"{TABLES['golden_datasets']}.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_sources: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class EvaluationRun(TimestampSoftDeleteMixin, Base):
+    __tablename__ = TABLES["evaluation_runs"]
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    uuid: Mapped[uuid_lib.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        unique=True,
+        nullable=False,
+        default=uuid_lib.uuid4,
+    )
+    dataset_id: Mapped[int | None] = mapped_column(
+        ForeignKey(f"{TABLES['golden_datasets']}.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    status: Mapped[EvaluationRunStatus] = mapped_column(
+        Enum(
+            EvaluationRunStatus,
+            name="evaluation_run_status",
+            schema=settings.DB_SCHEMA,
+            values_callable=enum_values,
+            validate_strings=True,
+        ),
+        nullable=False,
+        default=EvaluationRunStatus.QUEUED,
+    )
+    total_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completed_cases: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+    failed_cases: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class EvaluationResult(TimestampSoftDeleteMixin, Base):
+    __tablename__ = TABLES["evaluation_results"]
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[int | None] = mapped_column(
+        ForeignKey(f"{TABLES['evaluation_runs']}.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    dataset_case_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            f"{TABLES['golden_dataset_cases']}.id",
+            ondelete="SET NULL",
+        ),
+        nullable=True,
+        index=True,
+    )
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    expected_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_answer: Mapped[str] = mapped_column(Text, nullable=False)
+    retrieved_context: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    recall_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    precision_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    correctness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relevancy_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    completeness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    faithfulness_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hallucination_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    citation_supported: Mapped[bool | None] = mapped_column(
+        Boolean,
+        nullable=True,
+    )
+    overall_score: Mapped[float | None] = mapped_column(Float, nullable=True)

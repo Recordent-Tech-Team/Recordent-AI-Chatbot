@@ -1,0 +1,51 @@
+{
+  "dataset_name": "recordent-golden-template",
+  "description": "Template for 100+ golden test cases",
+  "minimum_recommended_cases": 100,
+  "bulk_import_note": "Repeat the case template object to add as many cases as needed (100+ supported)",
+  "case_template": {
+    "question": "What is the vendor risk status for ACME?",
+    "expected_answer": "Vendor risk status for ACME is medium based on payment trend and delayed invoices.",
+    "expected_sources": [
+      "acme_vendor_profile.pdf#risk-summary",
+      "acme_invoice_aging.xlsx#Q2"
+    ]
+  },
+  "cases": [
+    {
+      "question": "Sample golden question 1",
+      "expected_answer": "Sample expected answer 1",
+      "expected_sources": [
+        "source snippet 1"
+      ]
+    },
+    {
+      "question": "Sample golden question 2",
+      "expected_answer": "Sample expected answer 2",
+      "expected_sources": [
+        "source snippet 2"
+      ]
+    },
+    {
+      "question": "Sample golden question 3",
+      "expected_answer": "Sample expected answer 3",
+      "expected_sources": [
+        "source snippet 3"
+      ]
+    },
+    {
+      "question": "Sample golden question 4",
+      "expected_answer": "Sample expected answer 4",
+      "expected_sources": [
+        "source snippet 4"
+      ]
+    },
+    {
+      "question": "Sample golden question 5",
+      "expected_answer": "Sample expected answer 5",
+      "expected_sources": [
+        "source snippet 5"
+      ]
+    }
+  ]
+}

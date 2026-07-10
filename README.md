@@ -16,6 +16,7 @@ FastAPI backend service for Recordent chatbot workflows, including secured chat 
 - CORS middleware support
 - Health endpoint and startup dependency validations
 - AWS integrations for Bedrock, S3, and session management
+- Golden dataset and benchmark evaluation framework for LLM/RAG quality tracking
 
 ## Tech Stack
 - Python 3.12
@@ -27,6 +28,7 @@ FastAPI backend service for Recordent chatbot workflows, including secured chat 
 - aioboto3 / AWS SDK
 - Amazon Bedrock
 - FAISS (vector index assets)
+- DeepEval (preferred evaluator, with runtime fallback)
 
 ## Setup
 Install dependencies:
@@ -57,12 +59,32 @@ docker run -p 8000:8000 recordent-ai-chatbot
 ## APIs
 - Health APIs: `/`, `/health-check`
 - Chat APIs (v1): `/v1/chat/create-session`, `/v1/chat/send-message`, `/v1/chat/close-session`
-- Admin APIs (v1): `/v1/admin/embeddings/update`, `/v1/admin/embeddings/versions`, `/v1/admin/embeddings/rollback`, `/v1/admin/chat/sessions`, `/v1/admin/chat/history/{session_id}`, `/v1/admin/analytics`
+- Admin APIs (v1): `/v1/admin/embeddings/update`, `/v1/admin/embeddings/versions`, `/v1/admin/embeddings/rollback`, `/v1/admin/chat/sessions`, `/v1/admin/chat/history?session_id=<uuid>`, `/v1/admin/analytics`
+- Evaluation APIs (admin):
+	- `/v1/admin/evaluation/golden-datasets`
+	- `/v1/admin/evaluation/golden-datasets/{dataset_id}/cases:bulk`
+	- `/v1/admin/evaluation/golden-datasets/{dataset_id}/cases`
+	- `/v1/admin/evaluation/run-single`
+	- `/v1/admin/evaluation/run-benchmark`
+	- `/v1/admin/evaluation/runs/{run_id}`
+	- `/v1/admin/evaluation/history`
+	- `/v1/admin/evaluation/metrics`
 
 ## Performance Notes
 - Chat evaluation is configurable using `CHAT_EVALUATION_ENABLED`.
 - Default is `False` to reduce chat latency.
 - Set `CHAT_EVALUATION_ENABLED=true` when you need evaluation scoring logs.
+
+## Evaluation Framework
+- Golden dataset template file is available at `app/prompts/golden_dataset_template.json`.
+- Framework tracks retrieval metrics (recall, precision), answer metrics (correctness, relevancy, completeness), grounding metrics (faithfulness, hallucination), and citation support.
+- Full benchmark runs are asynchronous and return a `run_id` for polling status.
+- Dashboard metrics endpoint (`/v1/admin/evaluation/metrics`) returns:
+	- Context Recall %
+	- Context Precision %
+	- Correctness %
+	- Faithfulness %
+	- Hallucination Rate %
 
 ## Test
 No automated test command is currently documented in this repository.

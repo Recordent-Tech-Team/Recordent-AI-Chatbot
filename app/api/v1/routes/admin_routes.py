@@ -4,13 +4,23 @@ from fastapi import APIRouter, Depends, File, Query, UploadFile
 
 from app.api.v1.dependencies import (
     get_admin_service,
+    get_evaluation_framework_service,
     get_ingestion_service,
 )
 from app.core.logger import get_logger
 from app.core.responses import success
 from app.core.security import verify_admin_api_secret
 from app.schemas.chat import RollbackRequest
+from app.schemas.evaluation import (
+    GoldenDatasetBulkCasesRequest,
+    GoldenDatasetCreateRequest,
+    RunBenchmarkRequest,
+    SingleEvaluationRequest,
+)
 from app.services.admin.admin_service import AdminService
+from app.services.evaluation.framework_service import (
+    EvaluationFrameworkService,
+)
 from app.services.ingestion.ingestion_service import IngestionService
 
 logger = get_logger("admin_routes.py")
@@ -104,5 +114,155 @@ async def get_analytics(
     return success(
         message="Success",
         data=await admin_service.get_analytics(),
+        http_status=200,
+    )
+
+
+@router.post("/evaluation/golden-datasets")
+async def create_golden_dataset(
+    request: GoldenDatasetCreateRequest,
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.create_dataset(
+            name=request.name,
+            description=request.description,
+        ),
+        http_status=201,
+    )
+
+
+@router.get("/evaluation/golden-datasets")
+async def list_golden_datasets(
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.list_datasets(),
+        http_status=200,
+    )
+
+
+@router.post("/evaluation/golden-datasets/{dataset_id}/cases:bulk")
+async def bulk_add_golden_cases(
+    dataset_id: uuid.UUID,
+    request: GoldenDatasetBulkCasesRequest,
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.add_cases_bulk(
+            dataset_uuid=dataset_id,
+            cases=[case.model_dump() for case in request.cases],
+        ),
+        http_status=201,
+    )
+
+
+@router.get("/evaluation/golden-datasets/{dataset_id}/cases")
+async def list_golden_cases(
+    dataset_id: uuid.UUID,
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.list_cases(dataset_uuid=dataset_id),
+        http_status=200,
+    )
+
+
+@router.post("/evaluation/run-single")
+async def run_single_evaluation(
+    request: SingleEvaluationRequest,
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.run_single_evaluation(
+            question=request.question,
+            expected_answer=request.expected_answer,
+            expected_sources=request.expected_sources,
+        ),
+        http_status=200,
+    )
+
+
+@router.post("/evaluation/run-benchmark")
+async def run_full_benchmark(
+    request: RunBenchmarkRequest,
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.run_full_benchmark(
+            dataset_uuid=request.dataset_id,
+        ),
+        http_status=202,
+    )
+
+
+@router.get("/evaluation/runs/{run_id}")
+async def get_benchmark_run_status(
+    run_id: uuid.UUID,
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.get_run_status(run_id),
+        http_status=200,
+    )
+
+
+@router.get("/evaluation/history")
+async def get_evaluation_history(
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    run_id: uuid.UUID | None = Query(None),
+    dataset_id: uuid.UUID | None = Query(None),
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.get_history(
+            page=page,
+            size=size,
+            run_uuid=run_id,
+            dataset_uuid=dataset_id,
+        ),
+        http_status=200,
+    )
+
+
+@router.get("/evaluation/metrics")
+async def get_evaluation_metrics(
+    run_id: uuid.UUID | None = Query(None),
+    dataset_id: uuid.UUID | None = Query(None),
+    evaluation_service: EvaluationFrameworkService = Depends(
+        get_evaluation_framework_service
+    ),
+):
+    return success(
+        message="Success",
+        data=await evaluation_service.get_aggregated_metrics(
+            run_uuid=run_id,
+            dataset_uuid=dataset_id,
+        ),
         http_status=200,
     )

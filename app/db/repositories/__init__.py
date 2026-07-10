@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -13,7 +13,12 @@ from app.db.models import (
     DocumentVersionStatus,
     Embedding,
     EmbeddingArchive,
+    EvaluationResult,
+    EvaluationRun,
+    EvaluationRunStatus,
     EvaluationLog,
+    GoldenDataset,
+    GoldenDatasetCase,
     SessionStatus,
 )
 
@@ -391,3 +396,321 @@ class EvaluationLogRepository:
         self.db.add(log)
         await self.db.flush()
         return log
+
+
+class GoldenDatasetRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, name: str, description: str | None) -> GoldenDataset:
+        dataset = GoldenDataset(name=name, description=description)
+        self.db.add(dataset)
+        await self.db.flush()
+        return dataset
+
+    async def get_by_uuid(
+        self,
+        dataset_uuid: uuid.UUID,
+    ) -> GoldenDataset | None:
+        result = await self.db.execute(
+            select(GoldenDataset).where(
+                GoldenDataset.uuid == dataset_uuid,
+                GoldenDataset.deleted_at.is_(None),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def list_all(self) -> list[GoldenDataset]:
+        result = await self.db.execute(
+            select(GoldenDataset)
+            .where(GoldenDataset.deleted_at.is_(None))
+            .order_by(desc(GoldenDataset.created_at))
+        )
+        return list(result.scalars().all())
+
+
+class GoldenDatasetCaseRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def bulk_create(
+        self,
+        dataset_id: int,
+        cases: list[dict],
+    ) -> int:
+        for case in cases:
+            self.db.add(
+                GoldenDatasetCase(
+                    dataset_id=dataset_id,
+                    question=case["question"],
+                    expected_answer=case["expected_answer"],
+                    expected_sources=case.get("expected_sources"),
+                    is_active=True,
+                )
+            )
+        await self.db.flush()
+        return len(cases)
+
+    async def list_by_dataset(
+        self,
+        dataset_id: int,
+    ) -> list[GoldenDatasetCase]:
+        result = await self.db.execute(
+            select(GoldenDatasetCase)
+            .where(
+                GoldenDatasetCase.dataset_id == dataset_id,
+                GoldenDatasetCase.deleted_at.is_(None),
+                GoldenDatasetCase.is_active.is_(True),
+            )
+            .order_by(GoldenDatasetCase.id.asc())
+        )
+        return list(result.scalars().all())
+
+    async def count_by_dataset(self, dataset_id: int) -> int:
+        result = await self.db.execute(
+            select(func.count())
+            .select_from(GoldenDatasetCase)
+            .where(
+                GoldenDatasetCase.dataset_id == dataset_id,
+                GoldenDatasetCase.deleted_at.is_(None),
+                GoldenDatasetCase.is_active.is_(True),
+            )
+        )
+        return result.scalar_one()
+
+
+class EvaluationRunRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(
+        self,
+        dataset_id: int | None,
+        total_cases: int,
+    ) -> EvaluationRun:
+        run = EvaluationRun(
+            dataset_id=dataset_id,
+            total_cases=total_cases,
+            completed_cases=0,
+            failed_cases=0,
+            status=EvaluationRunStatus.QUEUED,
+        )
+        self.db.add(run)
+        await self.db.flush()
+        return run
+
+    async def get_by_uuid(self, run_uuid: uuid.UUID) -> EvaluationRun | None:
+        result = await self.db.execute(
+            select(EvaluationRun).where(
+                EvaluationRun.uuid == run_uuid,
+                EvaluationRun.deleted_at.is_(None),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_id(self, run_id: int) -> EvaluationRun | None:
+        result = await self.db.execute(
+            select(EvaluationRun).where(
+                EvaluationRun.id == run_id,
+                EvaluationRun.deleted_at.is_(None),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_ids(
+        self,
+        run_ids: list[int],
+    ) -> list[EvaluationRun]:
+        if not run_ids:
+            return []
+        result = await self.db.execute(
+            select(EvaluationRun).where(
+                EvaluationRun.id.in_(run_ids),
+                EvaluationRun.deleted_at.is_(None),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def mark_running(self, run: EvaluationRun) -> None:
+        run.status = EvaluationRunStatus.RUNNING
+        await self.db.flush()
+
+    async def mark_completed(
+        self,
+        run: EvaluationRun,
+        completed_cases: int,
+        failed_cases: int,
+    ) -> None:
+        run.status = EvaluationRunStatus.COMPLETED
+        run.completed_cases = completed_cases
+        run.failed_cases = failed_cases
+        run.error_message = None
+        await self.db.flush()
+
+    async def mark_failed(
+        self,
+        run: EvaluationRun,
+        error_message: str,
+        completed_cases: int,
+        failed_cases: int,
+    ) -> None:
+        run.status = EvaluationRunStatus.FAILED
+        run.completed_cases = completed_cases
+        run.failed_cases = failed_cases
+        run.error_message = error_message
+        await self.db.flush()
+
+    async def update_progress(
+        self,
+        run: EvaluationRun,
+        completed_cases: int,
+        failed_cases: int,
+    ) -> None:
+        run.completed_cases = completed_cases
+        run.failed_cases = failed_cases
+        await self.db.flush()
+
+
+class EvaluationResultRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(
+        self,
+        run_id: int | None,
+        dataset_case_id: int | None,
+        question: str,
+        expected_answer: str,
+        generated_answer: str,
+        retrieved_context: list[dict],
+        recall_score: float,
+        precision_score: float,
+        correctness_score: float,
+        relevancy_score: float,
+        completeness_score: float,
+        faithfulness_score: float,
+        hallucination_score: float,
+        citation_supported: bool,
+        overall_score: float,
+    ) -> EvaluationResult:
+        result = EvaluationResult(
+            run_id=run_id,
+            dataset_case_id=dataset_case_id,
+            question=question,
+            expected_answer=expected_answer,
+            generated_answer=generated_answer,
+            retrieved_context=retrieved_context,
+            recall_score=recall_score,
+            precision_score=precision_score,
+            correctness_score=correctness_score,
+            relevancy_score=relevancy_score,
+            completeness_score=completeness_score,
+            faithfulness_score=faithfulness_score,
+            hallucination_score=hallucination_score,
+            citation_supported=citation_supported,
+            overall_score=overall_score,
+        )
+        self.db.add(result)
+        await self.db.flush()
+        return result
+
+    async def list_history(
+        self,
+        page: int,
+        size: int,
+        run_id: int | None = None,
+        dataset_id: int | None = None,
+    ) -> tuple[list[EvaluationResult], int]:
+        filters = [EvaluationResult.deleted_at.is_(None)]
+
+        if run_id is not None:
+            filters.append(EvaluationResult.run_id == run_id)
+        elif dataset_id is not None:
+            filters.append(
+                EvaluationResult.run_id.in_(
+                    select(EvaluationRun.id).where(
+                        and_(
+                            EvaluationRun.dataset_id == dataset_id,
+                            EvaluationRun.deleted_at.is_(None),
+                        )
+                    )
+                )
+            )
+
+        count_result = await self.db.execute(
+            select(func.count())
+            .select_from(EvaluationResult)
+            .where(and_(*filters))
+        )
+        total = count_result.scalar_one()
+
+        offset = (page - 1) * size
+        result = await self.db.execute(
+            select(EvaluationResult)
+            .where(and_(*filters))
+            .order_by(desc(EvaluationResult.created_at))
+            .offset(offset)
+            .limit(size)
+        )
+        return list(result.scalars().all()), total
+
+    async def get_aggregates(
+        self,
+        run_id: int | None = None,
+        dataset_id: int | None = None,
+    ) -> dict:
+        filters = [EvaluationResult.deleted_at.is_(None)]
+        if run_id is not None:
+            filters.append(EvaluationResult.run_id == run_id)
+        elif dataset_id is not None:
+            filters.append(
+                EvaluationResult.run_id.in_(
+                    select(EvaluationRun.id).where(
+                        and_(
+                            EvaluationRun.dataset_id == dataset_id,
+                            EvaluationRun.deleted_at.is_(None),
+                        )
+                    )
+                )
+            )
+
+        result = await self.db.execute(
+            select(
+                func.count(EvaluationResult.id),
+                func.avg(EvaluationResult.recall_score),
+                func.avg(EvaluationResult.precision_score),
+                func.avg(EvaluationResult.correctness_score),
+                func.avg(EvaluationResult.faithfulness_score),
+                func.avg(EvaluationResult.hallucination_score),
+            ).where(and_(*filters))
+        )
+        (
+            total,
+            avg_recall,
+            avg_precision,
+            avg_correctness,
+            avg_faithfulness,
+            avg_hallucination,
+        ) = result.one()
+
+        total_count = int(total or 0)
+        return {
+            "total_evaluations": total_count,
+            "context_recall_pct": round(float(avg_recall or 0.0) * 100, 2),
+            "context_precision_pct": round(
+                float(avg_precision or 0.0) * 100,
+                2,
+            ),
+            "correctness_pct": round(
+                float(avg_correctness or 0.0) * 100,
+                2,
+            ),
+            "faithfulness_pct": round(
+                float(avg_faithfulness or 0.0) * 100,
+                2,
+            ),
+            "hallucination_rate_pct": round(
+                float(avg_hallucination or 0.0) * 100,
+                2,
+            ),
+        }
