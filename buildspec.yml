@@ -4,7 +4,6 @@ env:
   variables:
     AWS_DEFAULT_REGION: us-east-1
     ECR_REPOSITORY: rec-ai-chatbot-dev
-    IMAGE_TAG: latest
 
 phases:
   pre_build:
@@ -12,13 +11,15 @@ phases:
       - echo Logging in to Amazon ECR...
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_REPOSITORY
+      - IMAGE_TAG=$(date +%Y%m%d)-$CODEBUILD_BUILD_NUMBER
+      - echo Image Tag = $IMAGE_TAG
       - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URI
 
   build:
     commands:
       - echo Build started on `date`
       - docker build -t $ECR_REPOSITORY .
-      - docker tag $ECR_REPOSITORY:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
+      - docker tag $ECR_REPOSITORY:latest $REPOSITORY_URI:$IMAGE_TAG
 
   post_build:
     commands:
